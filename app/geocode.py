@@ -27,7 +27,7 @@ from typing import Dict, Optional
 log = logging.getLogger("waypoint.geocode")
 
 STREET_KEYS = ("road", "pedestrian", "footway", "path", "cycleway", "residential", "service", "highway")
-AREA_KEYS = ("neighbourhood", "quarter", "suburb", "city_district", "borough")
+AREA_KEYS = ("barangay", "neighbourhood", "quarter", "suburb", "village", "city_district", "borough")
 CITY_KEYS = ("city", "town", "municipality", "village", "hamlet", "county")
 REGION_KEYS = ("state", "region", "province", "state_district")
 

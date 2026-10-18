@@ -94,15 +94,20 @@ class Tracker:
         self._add_event("info", f"{label} test", beep=(device == "buzzer"))
 
     def _place_phrase(self) -> str:
-        """'Roxas Boulevard in Manila', or '' while no address is known."""
+        """'Roxas Boulevard, Barangay San Antonio, Manila', or '' while no address is known.
+
+        Prefers street, then barangay (or whatever area name Nominatim gave), then city,
+        joining whichever parts are actually known. Never falls back to coordinates here -
+        that fallback only kicks in in speech_text() when NOTHING was found at all.
+        """
         a = self.geocoder.snapshot()
         if not a["ok"]:
             return ""
-        street = str(a["street"] or a["area"])
+        street = str(a["street"])
+        area = str(a["area"])  # barangay, or the closest equivalent Nominatim returned
         city = str(a["city"])
-        if street and city:
-            return f"{street} in {city}"
-        return street or city
+        parts = [p for p in (street, area, city) if p]
+        return ", ".join(parts)
 
     def speech_text(self) -> str:
         snap = self.state.snapshot(self.cfg.stale_after)
@@ -116,7 +121,7 @@ class Tracker:
         place = self._place_phrase()
         if place:
             text = f"You are on {place}"
-        else:  # no street name yet (for example no internet): say the coordinates instead
+        else:  # no place name at all yet (for example no internet): say the coordinates instead
             text = (
                 f"You are at latitude {abs(lat):.4f} {'north' if lat >= 0 else 'south'}, "
                 f"longitude {abs(lon):.4f} {'east' if lon >= 0 else 'west'}"

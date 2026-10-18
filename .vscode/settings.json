@@ -1,0 +1,7 @@
+{
+  "python.terminal.activateEnvironment": true,
+  "python.testing.unittestEnabled": true,
+  "python.testing.unittestArgs": ["-v", "-s", "./tests", "-p", "test_*.py"],
+  "files.exclude": { "**/__pycache__": true },
+  "editor.tabSize": 4
+}

@@ -1,0 +1,47 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Waypoint: run (auto)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Waypoint: simulator only",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": { "GPS_MODE": "simulator", "HARDWARE": "off" }
+    },
+    {
+      "name": "Waypoint: real GPS module",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": { "GPS_MODE": "serial" }
+    },
+    {
+      "name": "Tool: raw NMEA monitor",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/nmea_monitor.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Tool: hardware test",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/hardware_test.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

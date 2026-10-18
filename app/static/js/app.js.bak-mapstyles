@@ -1,0 +1,535 @@
+/* Waypoint dashboard. Plain JavaScript, no build step. */
+(function () {
+  "use strict";
+
+  const CFG = window.WAYPOINT || {};
+  const $ = (sel, root) => (root || document).querySelector(sel);
+  const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
+
+  const store = {
+    points: [],
+    lastId: 0,
+    epoch: 0,
+    lastEventId: null,
+    follow: true,
+    placed: false,       // has the map been centred on a position yet?
+    last: null,          // latest /api/state payload
+    metric: "speed",
+    voiceTarget: "browser",
+    auto: false,
+    autoTimer: null,
+  };
+  const MAX_POINTS = 3600;
+  const CHART_POINTS = 300;
+
+  let map = null;        // map adapter (Leaflet or Google), see below
+  let chart = null;
+
+  // ---------- small helpers ----------
+  function loadPref(key, fallback) {
+    try { const v = localStorage.getItem("waypoint." + key); return v === null ? fallback : v; } catch (e) { return fallback; }
+  }
+  function savePref(key, value) {
+    try { localStorage.setItem("waypoint." + key, String(value)); } catch (e) { /* private mode */ }
+  }
+  const fmt = (v, d) => (v === null || v === undefined || Number.isNaN(v) ? "--" : Number(v).toFixed(d));
+
+  function toast(message, level) {
+    const host = $("#toasts");
+    const el = document.createElement("div");
+    el.className = "toast " + (level || "info");
+    el.innerHTML = "<i></i><span></span>";
+    el.lastChild.textContent = message;
+    host.appendChild(el);
+    while (host.children.length > 4) host.removeChild(host.firstChild);
+    setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 300); }, 4200);
+  }
+
+  async function api(path, body) {
+    const res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+    });
+    return res.json();
+  }
+
+  // ======================================================================
+  // Map adapters. Both expose the same small interface:
+  //   moveTo(lat, lon, {center, first})  setStale(bool)  setTrack(points)
+  //   addPoint(p)  fit()  onUserPan(cb)  label
+  // ======================================================================
+  function markerHtml() { return '<span class="ring"></span><span class="core"></span>'; }
+
+  function createLeafletMap(el) {
+    const m = L.map(el, { zoomControl: false, preferCanvas: true }).setView([20, 0], 2);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      subdomains: "abcd", maxZoom: 20,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    }).addTo(m);
+    L.control.zoom({ position: "bottomright" }).addTo(m);
+    const line = L.polyline([], { color: "#0b7a86", weight: 4, opacity: 0.9, lineCap: "round", lineJoin: "round" }).addTo(m);
+    const icon = L.divIcon({ className: "wp-marker", html: markerHtml(), iconSize: [28, 28], iconAnchor: [14, 14] });
+    let marker = null;
+    let stale = false;
+
+    function applyStale() {
+      if (marker && marker.getElement()) marker.getElement().classList.toggle("stale", stale);
+    }
+    return {
+      label: "OpenStreetMap",
+      moveTo(lat, lon, opts) {
+        const ll = [lat, lon];
+        if (!marker) { marker = L.marker(ll, { icon: icon, interactive: false, keyboard: false }).addTo(m); applyStale(); }
+        else marker.setLatLng(ll);
+        if (opts.first) m.setView(ll, 17);
+        else if (opts.center) m.panTo(ll, { animate: true, duration: 0.9, easeLinearity: 0.5 });
+      },
+      setStale(v) { stale = v; applyStale(); },
+      setTrack(pts) { line.setLatLngs(pts.map((p) => [p.lat, p.lon])); },
+      addPoint(p) { line.addLatLng([p.lat, p.lon]); },
+      fit() {
+        const ll = line.getLatLngs();
+        if (ll.length >= 2) m.fitBounds(line.getBounds(), { padding: [60, 60], maxZoom: 18 });
+        else if (marker) m.setView(marker.getLatLng(), 17);
+      },
+      onUserPan(cb) { m.on("dragstart", cb); },
+      destroy() { m.remove(); },
+    };
+  }
+
+  function loadGoogleScript(key) {
+    return new Promise(function (resolve, reject) {
+      if (window.google && window.google.maps && window.google.maps.importLibrary) return resolve();
+      const timer = setTimeout(function () { reject(new Error("Google Maps took too long to load")); }, 8000);
+      window.__waypointGmapsReady = function () { clearTimeout(timer); resolve(); };
+      window.gm_authFailure = function () { console.warn("Google Maps rejected the API key."); switchToLeaflet("Google Maps key was rejected"); };
+      const s = document.createElement("script");
+      s.async = true;
+      s.src = "https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(key) + "&loading=async&callback=__waypointGmapsReady&v=weekly";
+      s.onerror = function () { clearTimeout(timer); reject(new Error("Google Maps script blocked or offline")); };
+      document.head.appendChild(s);
+    });
+  }
+
+  async function createGoogleMap(el, key, mapId) {
+    await loadGoogleScript(key);
+    const lib = await google.maps.importLibrary("maps");
+    const markerLib = await google.maps.importLibrary("marker");
+    const m = new lib.Map(el, {
+      center: { lat: 20, lng: 0 }, zoom: 2, mapId: mapId || "DEMO_MAP_ID",
+      disableDefaultUI: true, zoomControl: true, clickableIcons: false, gestureHandling: "greedy",
+    });
+    const line = new lib.Polyline({ map: m, path: [], strokeColor: "#0b7a86", strokeOpacity: 0.9, strokeWeight: 4 });
+    const content = document.createElement("div");
+    content.className = "wp-marker";
+    content.style.transform = "translateY(50%)"; // advanced markers anchor at the bottom centre
+    content.innerHTML = markerHtml();
+    let marker = null;
+    return {
+      label: "Google Maps",
+      moveTo(lat, lon, opts) {
+        const pos = { lat: lat, lng: lon };
+        if (!marker) marker = new markerLib.AdvancedMarkerElement({ map: m, position: pos, content: content });
+        else marker.position = pos;
+        if (opts.first) { m.setCenter(pos); m.setZoom(17); }
+        else if (opts.center) m.panTo(pos);
+      },
+      setStale(v) { content.classList.toggle("stale", v); },
+      setTrack(pts) { line.setPath(pts.map((p) => ({ lat: p.lat, lng: p.lon }))); },
+      addPoint(p) { line.getPath().push(new google.maps.LatLng(p.lat, p.lon)); },
+      fit() {
+        const path = line.getPath();
+        if (path.getLength() >= 2) {
+          const b = new google.maps.LatLngBounds();
+          path.forEach((ll) => b.extend(ll));
+          m.fitBounds(b, 60);
+        } else if (marker) { m.setCenter(marker.position); m.setZoom(17); }
+      },
+      onUserPan(cb) { m.addListener("dragstart", cb); },
+      destroy() { /* the container is replaced wholesale */ },
+    };
+  }
+
+  function freshMapElement() {
+    const root = $("#mapRoot");
+    root.innerHTML = "";
+    const el = document.createElement("div");
+    el.className = "map-canvas";
+    root.appendChild(el);
+    return el;
+  }
+
+  function attachMap(adapter) {
+    map = adapter;
+    $("#providerChip").textContent = adapter.label;
+    map.onUserPan(function () { setFollow(false); });
+    // Re-apply what we already know (used when switching providers).
+    if (store.points.length) map.setTrack(store.points);
+    if (store.last && store.last.gps.has_position) {
+      map.moveTo(store.last.gps.lat, store.last.gps.lon, { first: true });
+      map.setStale(!store.last.gps.fix);
+      store.placed = true;
+    }
+  }
+
+  function switchToLeaflet(reason) {
+    if (map && map.label === "OpenStreetMap") return;
+    console.info("Using OpenStreetMap. " + (reason || ""));
+    store.placed = false;
+    attachMap(createLeafletMap(freshMapElement()));
+    if (reason) toast(reason + ". Showing OpenStreetMap instead.", "warn");
+  }
+
+  async function initMap() {
+    const key = (CFG.googleMapsKey || "").trim();
+    if (key) {
+      try {
+        attachMap(await createGoogleMap(freshMapElement(), key, CFG.googleMapId));
+        return;
+      } catch (err) {
+        console.warn(err);
+        switchToLeaflet("Google Maps unavailable");
+        return;
+      }
+    }
+    switchToLeaflet("");
+  }
+
+  // ======================================================================
+  // Chart
+  // ======================================================================
+  const METRICS = {
+    speed: { label: "Speed (km/h)", get: (p) => p.speed, decimals: 1 },
+    alt: { label: "Altitude (m)", get: (p) => p.alt, decimals: 1 },
+    sats: { label: "Satellites", get: (p) => p.sats, decimals: 0 },
+  };
+
+  function initChart() {
+    const ctx = $("#chart").getContext("2d");
+    const grad = ctx.createLinearGradient(0, 0, 0, 190);
+    grad.addColorStop(0, "rgba(11,122,134,0.22)");
+    grad.addColorStop(1, "rgba(11,122,134,0)");
+    chart = new Chart(ctx, {
+      type: "line",
+      data: { labels: [], datasets: [{ label: "", data: [], borderColor: "#0b7a86", backgroundColor: grad, borderWidth: 2.2, pointRadius: 0, pointHoverRadius: 4, tension: 0.35, fill: true }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false, interaction: { intersect: false, mode: "index" },
+        plugins: { legend: { display: false }, tooltip: { displayColors: false, backgroundColor: "#10222b", padding: 10, cornerRadius: 10, titleFont: { family: "inherit" }, bodyFont: { family: "inherit" } } },
+        scales: {
+          x: { grid: { display: false }, border: { display: false }, ticks: { maxTicksLimit: 6, color: "#6b7a82", font: { size: 11 }, maxRotation: 0 } },
+          y: { grid: { color: "#e8ece6" }, border: { display: false }, ticks: { color: "#6b7a82", font: { size: 11 }, maxTicksLimit: 5 }, grace: "12%" },
+        },
+      },
+    });
+  }
+
+  function timeLabel(t) {
+    return new Date(t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+  }
+
+  function renderChart() {
+    if (!chart) return;
+    const m = METRICS[store.metric];
+    const slice = store.points.slice(-CHART_POINTS);
+    chart.data.labels = slice.map((p) => timeLabel(p.t));
+    chart.data.datasets[0].data = slice.map((p) => m.get(p));
+    chart.data.datasets[0].label = m.label;
+    chart.options.scales.y.beginAtZero = store.metric !== "alt";
+    chart.update("none");
+    $("#chartEmpty").hidden = slice.length > 0;
+  }
+
+  // ======================================================================
+  // Rendering
+  // ======================================================================
+  function compass(deg) {
+    if (deg === null || deg === undefined) return "";
+    return ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(deg / 45) % 8];
+  }
+  function hdopLabel(h) {
+    if (h === null || h === undefined) return "";
+    if (h <= 1) return "excellent";
+    if (h <= 2) return "good";
+    if (h <= 5) return "fair";
+    return "poor";
+  }
+
+  const STATUS_TEXT = {
+    locked: (s) => "Locked on " + s.gps.satellites + " satellite" + (s.gps.satellites === 1 ? "" : "s"),
+    searching: () => "Searching for satellites",
+    offline: () => "No GPS signal",
+    off: () => "GPS switched off",
+  };
+  const NOTICE = {
+    searching: ["Searching for satellites", "Keep the antenna in view of the sky."],
+    offline: ["No signal from the GPS module", "Check the wiring and the serial port."],
+    off: ["GPS module is switched off", "Turn it on in the controls."],
+  };
+
+  function renderStatus(s) {
+    const pill = $("#statusPill");
+    pill.dataset.state = s.status;
+    $("#statusText").textContent = STATUS_TEXT[s.status](s);
+    const sim = $("#sourceBadge");
+    sim.hidden = s.gps.source !== "simulator";
+    sim.title = s.gps.note || "";
+  }
+
+  function renderPosition(s) {
+    const g = s.gps;
+    const sect = $("#position");
+    sect.classList.toggle("is-stale", !g.fix);
+    if (g.has_position) {
+      $("#latValue").textContent = Math.abs(g.lat).toFixed(6);
+      $("#lonValue").textContent = Math.abs(g.lon).toFixed(6);
+      $("#latUnit").textContent = "°" + (g.lat >= 0 ? "N" : "S");
+      $("#lonUnit").textContent = "°" + (g.lon >= 0 ? "E" : "W");
+    } else {
+      $("#latValue").textContent = "--";
+      $("#lonValue").textContent = "--";
+      $("#latUnit").textContent = "°N";
+      $("#lonUnit").textContent = "°E";
+    }
+    const a = $("#btnOpenMaps");
+    if (g.has_position) {
+      a.href = "https://www.google.com/maps?q=" + g.lat.toFixed(6) + "," + g.lon.toFixed(6);
+      a.setAttribute("aria-disabled", "false");
+    } else {
+      a.removeAttribute("href");
+      a.setAttribute("aria-disabled", "true");
+    }
+  }
+
+  function renderReadings(s) {
+    const g = s.gps;
+    $("#rAlt").textContent = g.has_position ? fmt(g.altitude, 1) : "--";
+    $("#rSpeed").textContent = fmt(g.speed_kmh, 1);
+    $("#rHeading").textContent = g.fix && g.course !== null ? Math.round(g.course) + "°" : "--";
+    $("#rCompass").textContent = g.fix ? compass(g.course) : "";
+    $("#rSats").textContent = g.connected ? String(g.satellites) : "--";
+    $("#rInView").textContent = g.connected && g.in_view ? "of " + g.in_view : "";
+    $("#rHdop").textContent = g.fix ? fmt(g.hdop, 1) : "--";
+    $("#rHdopLabel").textContent = g.fix ? hdopLabel(g.hdop) : "";
+    $("#rUtc").textContent = g.utc_time || "--";
+  }
+
+  function renderControls(s) {
+    $$(".switch[data-device]").forEach((sw) => sw.setAttribute("aria-checked", String(!!s.controls[sw.dataset.device])));
+    const g = s.gps;
+    let sub = "Switched off";
+    if (s.controls.gps) sub = g.source === "simulator" ? "Simulator" : g.port ? g.port : "Looking for the module";
+    $("#subGps").textContent = sub;
+    $("#subGps").title = g.note || "";
+  }
+
+  function renderDevice(s) {
+    const lines = $$("#oled span");
+    for (let i = 0; i < 4; i++) lines[i].textContent = s.device.oled[i] || "";
+    $("#oled").classList.toggle("is-off", !s.controls.oled);
+
+    const red = $("#ledRed"), green = $("#ledGreen");
+    const st = s.device.leds;
+    red.className = "led red" + (st === "offline" || st === "test" ? " on" : st === "searching" ? " blink" : "");
+    green.className = "led green" + (st === "locked" || st === "test" ? " on" : "");
+  }
+
+  function timeOf(t) { return new Date(t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
+
+  function renderEvents(s) {
+    const ev = s.events;
+    const maxId = ev.length ? ev[ev.length - 1].id : 0;
+    if (store.lastEventId === null) {
+      store.lastEventId = maxId;   // do not replay history on first load
+    } else {
+      ev.filter((e) => e.id > store.lastEventId).forEach((e) => {
+        toast(e.message, e.level);
+        if (e.beep && s.controls.buzzer) ringBuzzer();
+      });
+      store.lastEventId = Math.max(store.lastEventId, maxId);
+    }
+    if (ev.length) {
+      const last = ev[ev.length - 1];
+      $("#lastEvent").textContent = last.message + " at " + timeOf(last.t);
+    }
+  }
+
+  let ringTimer = null;
+  function ringBuzzer() {
+    const el = $("#buzzerInd");
+    el.classList.add("ring");
+    clearTimeout(ringTimer);
+    ringTimer = setTimeout(() => el.classList.remove("ring"), 1700);
+  }
+
+  function renderMapState(s) {
+    const g = s.gps;
+    const notice = $("#mapNotice");
+    if (!g.has_position) {
+      const n = NOTICE[s.status] || NOTICE.searching;
+      $("#noticeTitle").textContent = n[0];
+      $("#noticeBody").textContent = n[1];
+      notice.hidden = false;
+    } else {
+      notice.hidden = true;
+    }
+    if (!map || !g.has_position) return;
+    const first = !store.placed;
+    map.moveTo(g.lat, g.lon, { first: first, center: store.follow && g.fix });
+    map.setStale(!g.fix);
+    store.placed = true;
+  }
+
+  function mergePoints(s) {
+    if (s.epoch !== store.epoch) {
+      // first load, or the track was cleared
+      if (store.epoch !== 0) { store.points = []; if (map) map.setTrack([]); }
+      store.epoch = s.epoch;
+    }
+    if (s.points.length) {
+      s.points.forEach((p) => { store.points.push(p); if (map) map.addPoint(p); });
+      if (store.points.length > MAX_POINTS) store.points.splice(0, store.points.length - MAX_POINTS);
+    }
+    store.lastId = Math.max(store.lastId, s.last_id);
+  }
+
+  function handleState(s) {
+    store.last = s;
+    mergePoints(s);
+    renderStatus(s);
+    renderPosition(s);
+    renderReadings(s);
+    renderControls(s);
+    renderDevice(s);
+    renderEvents(s);
+    renderMapState(s);
+    renderChart();
+  }
+
+  // ======================================================================
+  // Polling
+  // ======================================================================
+  function setUnreachable() {
+    const pill = $("#statusPill");
+    pill.dataset.state = "unreachable";
+    $("#statusText").textContent = "Server unreachable";
+  }
+
+  async function poll() {
+    try {
+      const res = await fetch("/api/state?since=" + store.lastId, { cache: "no-store" });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      handleState(await res.json());
+    } catch (err) {
+      console.warn("Poll failed:", err);
+      setUnreachable();
+    } finally {
+      setTimeout(poll, 1000);
+    }
+  }
+
+  // ======================================================================
+  // Controls
+  // ======================================================================
+  function setFollow(on) {
+    store.follow = on;
+    const b = $("#btnFollow");
+    b.classList.toggle("is-on", on);
+    b.setAttribute("aria-pressed", String(on));
+    if (on && map && store.last && store.last.gps.fix) {
+      map.moveTo(store.last.gps.lat, store.last.gps.lon, { center: true });
+    }
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+    return new Promise(function (resolve, reject) {   // plain http on your network is not a "secure context"
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy") ? resolve() : reject(new Error("copy failed")); }
+      catch (e) { reject(e); } finally { ta.remove(); }
+    });
+  }
+
+  function speakInBrowser(text) {
+    if (!("speechSynthesis" in window)) { toast("This browser cannot speak. Use the device speaker.", "warn"); return; }
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+  }
+
+  async function speak(quiet) {
+    if (!store.last) return;
+    if (store.voiceTarget === "browser") { speakInBrowser(store.last.speech); return; }
+    try {
+      const r = await api("/api/voice/speak");
+      if (!r.ok && !quiet) toast(r.error || "The device could not speak.", "warn");
+    } catch (e) { if (!quiet) toast("Could not reach the server.", "error"); }
+  }
+
+  function setAuto(on) {
+    store.auto = on;
+    $("#swAuto").setAttribute("aria-checked", String(on));
+    clearInterval(store.autoTimer);
+    store.autoTimer = on ? setInterval(() => speak(true), 30000) : null;
+  }
+
+  function setVoiceTarget(t) {
+    store.voiceTarget = t;
+    $$('[data-target]').forEach((b) => b.setAttribute("aria-checked", String(b.dataset.target === t)));
+    savePref("voiceTarget", t);
+  }
+
+  function bindControls() {
+    // On/off switches
+    $$(".switch[data-device]").forEach((sw) => {
+      sw.addEventListener("click", async () => {
+        const next = sw.getAttribute("aria-checked") !== "true";
+        sw.setAttribute("aria-checked", String(next)); // optimistic; the next poll confirms it
+        try { await api("/api/control", { device: sw.dataset.device, enabled: next }); }
+        catch (e) { toast("Could not reach the server.", "error"); }
+      });
+    });
+    // Test buttons
+    $$("[data-test]").forEach((b) => b.addEventListener("click", async () => {
+      try { await api("/api/test/" + b.dataset.test); } catch (e) { toast("Could not reach the server.", "error"); }
+    }));
+    // Map tools
+    $("#btnFollow").addEventListener("click", () => setFollow(!store.follow));
+    $("#btnFit").addEventListener("click", () => { setFollow(false); if (map) map.fit(); });
+    $("#btnClear").addEventListener("click", async () => {
+      try { await api("/api/track/clear"); } catch (e) { toast("Could not reach the server.", "error"); }
+    });
+    // Coordinates
+    $("#btnCopy").addEventListener("click", () => {
+      const g = store.last && store.last.gps;
+      if (!g || !g.has_position) { toast("No position to copy yet.", "warn"); return; }
+      copyText(g.lat.toFixed(6) + ", " + g.lon.toFixed(6)).then(
+        () => toast("Coordinates copied", "success"),
+        () => toast("Copy is blocked by this browser.", "warn"));
+    });
+    $("#btnOpenMaps").addEventListener("click", (e) => { if (e.currentTarget.getAttribute("aria-disabled") === "true") e.preventDefault(); });
+    // Chart tabs
+    $$(".seg [data-metric]").forEach((b) => b.addEventListener("click", () => {
+      store.metric = b.dataset.metric;
+      $$(".seg [data-metric]").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+      renderChart();
+    }));
+    // Voice
+    $("#btnSpeak").addEventListener("click", () => speak(false));
+    $$("[data-target]").forEach((b) => b.addEventListener("click", () => setVoiceTarget(b.dataset.target)));
+    $("#swAuto").addEventListener("click", () => setAuto(!store.auto));
+    setVoiceTarget(loadPref("voiceTarget", "browser") === "device" ? "device" : "browser");
+  }
+
+  // ======================================================================
+  // Start
+  // ======================================================================
+  async function start() {
+    bindControls();
+    initChart();
+    await initMap();
+    poll();
+  }
+  start();
+})();

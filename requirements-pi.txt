@@ -1,0 +1,3 @@
+# Extra packages for the Raspberry Pi (GPIO + OLED). Install after requirements.txt.
+gpiozero>=2.0
+luma.oled>=3.12

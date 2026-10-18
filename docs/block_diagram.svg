@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 700" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#10222b"/>
+    </marker>
+    <style>
+      .box { fill:#fff; stroke:#10222b; stroke-width:2; }
+      .in  { fill:#dbeced; stroke:#0b7a86; stroke-width:2; }
+      .out { fill:#fde8e0; stroke:#d6481f; stroke-width:2; }
+      .pi  { fill:#f4f6f2; stroke:#10222b; stroke-width:2.5; }
+      .t   { font-size:17px; font-weight:700; fill:#10222b; text-anchor:middle; }
+      .s   { font-size:13px; fill:#41535c; text-anchor:middle; }
+      .l   { font-size:12.5px; fill:#10222b; }
+      .ln  { stroke:#10222b; stroke-width:2; fill:none; marker-end:url(#a); }
+      .ln2 { stroke:#10222b; stroke-width:2; fill:none; marker-end:url(#a); marker-start:url(#a); }
+    </style>
+  </defs>
+  <rect width="1100" height="700" fill="#fff"/>
+  <text x="550" y="34" class="t" style="font-size:22px">Figure 6.2: GPS tracker with buzzer, LEDs, OLED, voice and web dashboard</text>
+
+  <!-- Inputs -->
+  <rect class="in" x="40" y="55" width="220" height="60" rx="10"/>
+  <text x="150" y="82" class="t">GPS satellites</text><text x="150" y="101" class="s">radio signals</text>
+  <path class="ln" d="M150 115 V150"/>
+  <rect class="in" x="40" y="150" width="220" height="120" rx="10"/>
+  <text x="150" y="188" class="t">GPS module</text><text x="150" y="210" class="s">u-blox NEO-6M</text><text x="150" y="230" class="s">NMEA sentences, 9600 baud</text>
+  <rect class="box" x="40" y="400" width="220" height="70" rx="10"/>
+  <text x="150" y="432" class="t">5 V power supply</text><text x="150" y="454" class="s">USB-C</text>
+
+  <!-- GPS to Pi -->
+  <path class="ln" d="M260 190 H410"/><text x="272" y="182" class="l">TX to RX (GPIO15)</text>
+  <path class="ln" d="M410 235 H260"/><text x="272" y="253" class="l">RX to TX (GPIO14)</text>
+  <path class="ln" d="M260 435 H390"/>
+
+  <!-- Raspberry Pi -->
+  <rect class="pi" x="390" y="90" width="320" height="430" rx="16"/>
+  <text x="550" y="122" class="t" style="font-size:20px">Raspberry Pi</text>
+  <rect class="box" x="410" y="150" width="280" height="120" rx="10"/>
+  <text x="550" y="200" class="t">UART serial port</text><text x="550" y="222" class="s">/dev/serial0 (GPIO14 / GPIO15)</text>
+  <rect class="box" x="410" y="295" width="280" height="85" rx="10"/>
+  <text x="550" y="330" class="t">Python tracker</text><text x="550" y="352" class="s">NMEA parser, fix status, alerts</text>
+  <rect class="box" x="410" y="405" width="280" height="85" rx="10"/>
+  <text x="550" y="440" class="t">Flask web server</text><text x="550" y="462" class="s">JSON API and dashboard</text>
+
+  <!-- Outputs -->
+  <rect class="out" x="840" y="110" width="230" height="70" rx="10"/>
+  <text x="955" y="140" class="t">Active buzzer</text><text x="955" y="162" class="s">GPIO18 (alerts)</text>
+  <rect class="out" x="840" y="210" width="230" height="70" rx="10"/>
+  <text x="955" y="240" class="t">Red and green LEDs</text><text x="955" y="262" class="s">GPIO24 / GPIO23 (status)</text>
+  <rect class="out" x="840" y="310" width="230" height="70" rx="10"/>
+  <text x="955" y="340" class="t">OLED 128x64</text><text x="955" y="362" class="s">I2C: SDA GPIO2, SCL GPIO3</text>
+  <rect class="out" x="840" y="410" width="230" height="70" rx="10"/>
+  <text x="955" y="440" class="t">Speaker</text><text x="955" y="462" class="s">voice announces location</text>
+  <path class="ln" d="M710 145 H840"/>
+  <path class="ln" d="M710 245 H840"/>
+  <path class="ln" d="M710 345 H840"/>
+  <path class="ln" d="M710 445 H840"/>
+
+  <!-- Network / browser -->
+  <path class="ln2" d="M550 520 V580"/><text x="566" y="556" class="l">Wi-Fi / Ethernet (HTTP)</text>
+  <rect class="box" x="390" y="580" width="320" height="90" rx="10"/>
+  <text x="550" y="614" class="t">Web browser (PC or phone)</text>
+  <text x="550" y="636" class="s">live map, chart, controls, voice</text>
+  <path class="ln2" d="M390 625 H260"/>
+  <rect class="in" x="40" y="580" width="220" height="90" rx="10"/>
+  <text x="150" y="614" class="t">Google Maps API</text><text x="150" y="636" class="s">(OpenStreetMap as fallback)</text>
+</svg>

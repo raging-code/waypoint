@@ -145,6 +145,12 @@ button.provider { font: inherit; font-size: 12.5px; cursor: pointer; }
 .coord-value { font-size: 44px; font-weight: 300; letter-spacing: -0.035em; line-height: 1.12; white-space: nowrap; transition: color 0.2s; }
 .coord-unit { font-size: 18px; font-weight: 500; letter-spacing: 0; color: var(--muted); margin-left: 4px; }
 .position.is-stale .coord-value { color: #9aa6ac; }
+.place { display: flex; flex-direction: column; gap: 4px; }
+.place-street { font-size: 30px; font-weight: 400; letter-spacing: -0.025em; line-height: 1.12; overflow-wrap: anywhere; transition: color 0.2s; }
+.place-street.is-coords { font-size: 21px; font-weight: 450; letter-spacing: -0.01em; }
+.place-city { font-size: 17px; color: var(--ink-2); min-height: 1.4em; }
+.coord-line { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+.position.is-stale .place-street { color: #9aa6ac; }
 .coord-actions { display: flex; gap: 6px; margin: 0 -10px -6px; }
 
 .link-btn {

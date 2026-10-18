@@ -69,16 +69,13 @@
 
     <aside class="panel" aria-label="Readings and controls">
       <section class="position" id="position">
-        <div class="coord">
-          <span class="coord-label">Latitude</span>
-          <span class="coord-value"><span id="latValue">--</span><span id="latUnit" class="coord-unit">°N</span></span>
-        </div>
-        <div class="coord">
-          <span class="coord-label">Longitude</span>
-          <span class="coord-value"><span id="lonValue">--</span><span id="lonUnit" class="coord-unit">°E</span></span>
+        <div class="place">
+          <span id="placeStreet" class="place-street">Waiting for position</span>
+          <span id="placeCity" class="place-city"></span>
+          <span id="coordLine" class="coord-line"></span>
         </div>
         <div class="coord-actions">
-          <button id="btnCopy" class="link-btn" type="button">Copy</button>
+          <button id="btnCopy" class="link-btn" type="button">Copy coordinates</button>
           <a id="btnOpenMaps" class="link-btn" href="#" target="_blank" rel="noopener" aria-disabled="true">Open in Google Maps</a>
         </div>
       </section>

@@ -13,6 +13,7 @@ from collections import deque
 from typing import Deque, Dict, List, Optional
 
 from .config import Config
+from .geocode import ReverseGeocoder, ascii_text
 from .gps_reader import GPSReader, GPSState
 from .hardware import Hardware
 from .voice import Voice
@@ -37,6 +38,7 @@ class Tracker:
         self.reader = GPSReader(cfg, self.state)
         self.hardware = Hardware(cfg)
         self.voice = Voice(cfg.voice_enabled)
+        self.geocoder = ReverseGeocoder()
 
         self._lock = threading.RLock()
         self.controls: Dict[str, bool] = {d: True for d in DEVICES}
@@ -91,6 +93,17 @@ class Tracker:
         label = "OLED" if device == "oled" else device.capitalize()
         self._add_event("info", f"{label} test", beep=(device == "buzzer"))
 
+    def _place_phrase(self) -> str:
+        """'Roxas Boulevard in Manila', or '' while no address is known."""
+        a = self.geocoder.snapshot()
+        if not a["ok"]:
+            return ""
+        street = str(a["street"] or a["area"])
+        city = str(a["city"])
+        if street and city:
+            return f"{street} in {city}"
+        return street or city
+
     def speech_text(self) -> str:
         snap = self.state.snapshot(self.cfg.stale_after)
         if not self.controls["gps"]:
@@ -100,12 +113,16 @@ class Tracker:
         if not snap["fix"] or snap["lat"] is None:
             return "Searching for satellites. No position yet."
         lat, lon = float(snap["lat"]), float(snap["lon"])  # type: ignore[arg-type]
-        text = (
-            f"You are at latitude {abs(lat):.4f} {'north' if lat >= 0 else 'south'}, "
-            f"longitude {abs(lon):.4f} {'east' if lon >= 0 else 'west'}"
-        )
-        if snap["altitude"] is not None:
-            text += f", altitude {float(snap['altitude']):.0f} meters"  # type: ignore[arg-type]
+        place = self._place_phrase()
+        if place:
+            text = f"You are on {place}"
+        else:  # no street name yet (for example no internet): say the coordinates instead
+            text = (
+                f"You are at latitude {abs(lat):.4f} {'north' if lat >= 0 else 'south'}, "
+                f"longitude {abs(lon):.4f} {'east' if lon >= 0 else 'west'}"
+            )
+            if snap["altitude"] is not None:
+                text += f", altitude {float(snap['altitude']):.0f} meters"  # type: ignore[arg-type]
         speed = snap["speed_kmh"]
         if speed is not None and float(speed) >= 2.0:  # type: ignore[arg-type]
             text += f", moving {float(speed):.0f} kilometers per hour {_compass(snap['course'])}"  # type: ignore[arg-type]
@@ -163,11 +180,17 @@ class Tracker:
         if status == "locked" and snap["lat"] is not None:
             alt = snap["altitude"]
             spd = snap["speed_kmh"]
+            last = f"Alt {0 if alt is None else float(alt):.0f}m {0 if spd is None else float(spd):.1f}km/h"  # type: ignore[arg-type]
+            addr = self.geocoder.snapshot()
+            street = ascii_text(str(addr["street"] or addr["area"]))[:21]
+            city = ascii_text(str(addr["city"]))[:21]
+            if addr["ok"] and (street or city):
+                return [f"GPS LOCK  {snap['satellites']} sat", street or city, city if street else "", last]
             return [
                 f"GPS LOCK  {snap['satellites']} sat",
                 f"Lat {float(snap['lat']):.6f}",  # type: ignore[arg-type]
                 f"Lon {float(snap['lon']):.6f}",  # type: ignore[arg-type]
-                f"Alt {0 if alt is None else float(alt):.0f}m {0 if spd is None else float(spd):.1f}km/h",  # type: ignore[arg-type]
+                last,
             ]
         if status == "searching":
             return ["GPS searching...", f"In view: {snap['in_view']}", "Waiting for fix", ""]
@@ -186,6 +209,10 @@ class Tracker:
         self.hardware.leds.set_state(status if self.controls["leds"] else "off")
         # OLED
         self.hardware.oled.show(self._oled_lines(status, snap) if self.controls["oled"] else None)
+
+        # Street and city lookup (runs in the background, at most every 10 seconds)
+        if status == "locked" and snap["lat"] is not None:
+            self.geocoder.update(float(snap["lat"]), float(snap["lon"]))  # type: ignore[arg-type]
 
         # History (one point per second while there is a fix)
         if status == "locked" and snap["lat"] is not None:
@@ -237,6 +264,7 @@ class Tracker:
             "epoch": epoch,
             "last_id": last_id,
             "points": points,
+            "address": self.geocoder.snapshot(),
             "speech": self.speech_text(),
             "server_time": int(time.time()),
         }

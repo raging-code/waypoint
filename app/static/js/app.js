@@ -307,28 +307,49 @@
     sim.title = s.gps.note || "";
   }
 
+  function degrees(value, pos, neg) {
+    return Math.abs(value).toFixed(6) + "° " + (value >= 0 ? pos : neg);
+  }
+
   function renderPosition(s) {
     const g = s.gps;
-    const sect = $("#position");
-    sect.classList.toggle("is-stale", !g.fix);
-    if (g.has_position) {
-      $("#latValue").textContent = Math.abs(g.lat).toFixed(6);
-      $("#lonValue").textContent = Math.abs(g.lon).toFixed(6);
-      $("#latUnit").textContent = "°" + (g.lat >= 0 ? "N" : "S");
-      $("#lonUnit").textContent = "°" + (g.lon >= 0 ? "E" : "W");
+    const a = s.address || {};
+    $("#position").classList.toggle("is-stale", !g.fix);
+    const street = $("#placeStreet");
+    const city = $("#placeCity");
+    const coords = $("#coordLine");
+
+    if (!g.has_position) {
+      street.classList.remove("is-coords");
+      street.textContent = s.status === "searching" ? "Finding your position" : "No position yet";
+      city.textContent = "";
+      coords.textContent = "";
     } else {
-      $("#latValue").textContent = "--";
-      $("#lonValue").textContent = "--";
-      $("#latUnit").textContent = "°N";
-      $("#lonUnit").textContent = "°E";
+      const text = degrees(g.lat, "N", "S") + ", " + degrees(g.lon, "E", "W");
+      coords.textContent = text;
+      const main = a.ok ? (a.street || a.area || a.city) : "";
+      street.classList.toggle("is-coords", !main);
+      if (main) {
+        street.textContent = main;
+        const parts = [];
+        if (a.street && a.area) parts.push(a.area);
+        if (a.city && a.city !== main) parts.push(a.city);
+        city.textContent = parts.join(", ");
+      } else {
+        // No street name yet: show the coordinates and say why.
+        street.textContent = text;
+        city.textContent = a.enabled === false ? "Street lookup is turned off"
+          : a.error ? "Street name needs internet access" : "Looking up the street";
+      }
     }
-    const a = $("#btnOpenMaps");
+
+    const link = $("#btnOpenMaps");
     if (g.has_position) {
-      a.href = "https://www.google.com/maps?q=" + g.lat.toFixed(6) + "," + g.lon.toFixed(6);
-      a.setAttribute("aria-disabled", "false");
+      link.href = "https://www.google.com/maps?q=" + g.lat.toFixed(6) + "," + g.lon.toFixed(6);
+      link.setAttribute("aria-disabled", "false");
     } else {
-      a.removeAttribute("href");
-      a.setAttribute("aria-disabled", "true");
+      link.removeAttribute("href");
+      link.setAttribute("aria-disabled", "true");
     }
   }
 

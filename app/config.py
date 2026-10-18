@@ -65,6 +65,8 @@ class Config:
 
     # Voice
     voice_enabled: bool
+    piper_model: str
+    piper_speed: float
 
     # Simulator
     sim_lat: float
@@ -104,6 +106,8 @@ class Config:
             oled_i2c_port=_int("OLED_I2C_PORT", 1),
             oled_i2c_address=_int("OLED_I2C_ADDRESS", 0x3C),
             voice_enabled=_bool("VOICE_ENABLED", True),
+            piper_model=_str("PIPER_MODEL", ""),
+            piper_speed=_float("PIPER_SPEED", 1.0),
             sim_lat=_float("SIM_LAT", 14.5995),
             sim_lon=_float("SIM_LON", 120.9842),
             sim_speed_ms=_float("SIM_SPEED", 3.0),

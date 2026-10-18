@@ -37,7 +37,7 @@ class Tracker:
         self.state = GPSState()
         self.reader = GPSReader(cfg, self.state)
         self.hardware = Hardware(cfg)
-        self.voice = Voice(cfg.voice_enabled)
+        self.voice = Voice(cfg.voice_enabled, piper_model=cfg.piper_model, piper_speed=cfg.piper_speed)
         self.geocoder = ReverseGeocoder()
 
         self._lock = threading.RLock()

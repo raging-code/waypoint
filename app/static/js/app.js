@@ -66,11 +66,6 @@
   const OSM_CREDIT = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
   const TILE_STYLES = [
     {
-      id: "light", name: "Light",
-      url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-      options: { subdomains: "abcd", maxZoom: 20, attribution: OSM_CREDIT + ' &copy; <a href="https://carto.com/attributions">CARTO</a>' },
-    },
-    {
       id: "streets", name: "Streets",
       url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
       options: { maxNativeZoom: 19, maxZoom: 20, attribution: OSM_CREDIT },
@@ -85,16 +80,11 @@
       url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
       options: { subdomains: "abc", maxNativeZoom: 17, maxZoom: 20, attribution: 'Map data: ' + OSM_CREDIT + ', SRTM | Style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)' },
     },
-    {
-      id: "dark", name: "Dark",
-      url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-      options: { subdomains: "abcd", maxZoom: 20, attribution: OSM_CREDIT + ' &copy; <a href="https://carto.com/attributions">CARTO</a>' },
-    },
   ];
 
   function createLeafletMap(el) {
     const m = L.map(el, { zoomControl: false, preferCanvas: true }).setView([20, 0], 2);
-    let styleIdx = Math.max(0, TILE_STYLES.findIndex((s) => s.id === loadPref("mapStyle", "light")));
+    let styleIdx = Math.max(0, TILE_STYLES.findIndex((s) => s.id === loadPref("mapStyle", "streets")));
     let tiles = null;
     function applyStyle() {
       if (tiles) m.removeLayer(tiles);

@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Waypoint</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23FAFBF8' stroke='%230B7A86' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='6' fill='none' stroke='%230B7A86' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='2.6' fill='%23F0562B'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true">
+        <circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="2.2"/>
+        <circle cx="16" cy="16" r="7" fill="none" stroke="currentColor" stroke-width="2"/>
+        <circle cx="16" cy="16" r="2.8" fill="var(--buoy)"/>
+      </svg>
+      <span>Waypoint</span>
+    </div>
+    <div class="top-right">
+      <span id="sourceBadge" class="chip" hidden>Simulated data</span>
+      <div id="statusPill" class="status" data-state="connecting" role="status" aria-live="polite">
+        <span class="beacon"></span>
+        <span id="statusText">Connecting</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="stage" aria-label="Map and trace">
+      <div class="map-wrap">
+        <div id="mapRoot" class="map-root"></div>
+
+        <div class="map-tools">
+          <button id="btnFollow" class="tool is-on" type="button" title="Keep the map centred on the device" aria-pressed="true" aria-label="Follow device">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v3.5M12 17.5V21M3 12h3.5M17.5 12H21"/></svg>
+          </button>
+          <button id="btnFit" class="tool" type="button" title="Fit the whole track" aria-label="Fit track">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+          </button>
+          <button id="btnClear" class="tool" type="button" title="Clear the track" aria-label="Clear track">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M9 7V4h6v3"/></svg>
+          </button>
+        </div>
+
+        <div id="mapNotice" class="map-notice" hidden>
+          <strong id="noticeTitle">Searching for satellites</strong>
+          <span id="noticeBody">Keep the antenna in view of the sky.</span>
+        </div>
+        <button id="providerChip" class="provider" type="button" title="Change map style" aria-label="Change map style">Light</button>
+      </div>
+
+      <div class="trace">
+        <div class="trace-head">
+          <h2>Trace</h2>
+          <div class="seg" role="tablist" aria-label="Chart metric">
+            <button type="button" role="tab" data-metric="speed" aria-selected="true">Speed</button>
+            <button type="button" role="tab" data-metric="alt" aria-selected="false">Altitude</button>
+            <button type="button" role="tab" data-metric="sats" aria-selected="false">Satellites</button>
+          </div>
+        </div>
+        <div class="chart-box">
+          <canvas id="chart" aria-label="Live chart of the selected reading"></canvas>
+          <p id="chartEmpty" class="chart-empty">The trace starts when the module has a fix.</p>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel" aria-label="Readings and controls">
+      <section class="position" id="position">
+        <div class="coord">
+          <span class="coord-label">Latitude</span>
+          <span class="coord-value"><span id="latValue">--</span><span id="latUnit" class="coord-unit">°N</span></span>
+        </div>
+        <div class="coord">
+          <span class="coord-label">Longitude</span>
+          <span class="coord-value"><span id="lonValue">--</span><span id="lonUnit" class="coord-unit">°E</span></span>
+        </div>
+        <div class="coord-actions">
+          <button id="btnCopy" class="link-btn" type="button">Copy</button>
+          <a id="btnOpenMaps" class="link-btn" href="#" target="_blank" rel="noopener" aria-disabled="true">Open in Google Maps</a>
+        </div>
+      </section>
+
+      <section class="readings" aria-label="Live readings">
+        <div class="reading"><span class="r-label">Altitude</span><span class="r-value"><span id="rAlt">--</span><i>m</i></span></div>
+        <div class="reading"><span class="r-label">Speed</span><span class="r-value"><span id="rSpeed">--</span><i>km/h</i></span></div>
+        <div class="reading"><span class="r-label">Heading</span><span class="r-value"><span id="rHeading">--</span><i id="rCompass"></i></span></div>
+        <div class="reading"><span class="r-label">Satellites</span><span class="r-value"><span id="rSats">--</span><i id="rInView"></i></span></div>
+        <div class="reading"><span class="r-label">Accuracy</span><span class="r-value"><span id="rHdop">--</span><i id="rHdopLabel"></i></span></div>
+        <div class="reading"><span class="r-label">Time (UTC)</span><span class="r-value"><span id="rUtc">--</span></span></div>
+      </section>
+
+      <section class="controls" aria-label="Controls">
+        <h2>Controls</h2>
+
+        <div class="row">
+          <div class="row-main"><div class="row-title">GPS module</div><div id="subGps" class="row-sub">Starting</div></div>
+          <button class="switch" type="button" role="switch" aria-checked="true" aria-label="GPS module" data-device="gps"></button>
+        </div>
+        <div class="row">
+          <div class="row-main"><div class="row-title">Buzzer</div><div class="row-sub">Sounds on alerts</div></div>
+          <button class="link-btn" type="button" data-test="buzzer">Test</button>
+          <button class="switch" type="button" role="switch" aria-checked="true" aria-label="Buzzer" data-device="buzzer"></button>
+        </div>
+        <div class="row">
+          <div class="row-main"><div class="row-title">LED indicators</div><div class="row-sub">Green locked, red searching</div></div>
+          <button class="link-btn" type="button" data-test="leds">Test</button>
+          <button class="switch" type="button" role="switch" aria-checked="true" aria-label="LED indicators" data-device="leds"></button>
+        </div>
+        <div class="row">
+          <div class="row-main"><div class="row-title">OLED display</div><div class="row-sub">Shows position on the device</div></div>
+          <button class="link-btn" type="button" data-test="oled">Test</button>
+          <button class="switch" type="button" role="switch" aria-checked="true" aria-label="OLED display" data-device="oled"></button>
+        </div>
+
+        <div class="row voice">
+          <div class="row-main"><div class="row-title">Voice</div><div class="row-sub">Say where you are</div></div>
+          <button id="btnSpeak" class="solid-btn" type="button">Speak</button>
+        </div>
+        <div class="voice-options">
+          <div class="seg seg-sm" role="radiogroup" aria-label="Voice output">
+            <button type="button" role="radio" data-target="browser" aria-checked="true">This browser</button>
+            <button type="button" role="radio" data-target="device" aria-checked="false">Device speaker</button>
+          </div>
+          <label class="auto">
+            <span>Repeat every 30 s</span>
+            <button id="swAuto" class="switch switch-sm" type="button" role="switch" aria-checked="false" aria-label="Repeat announcement every 30 seconds"></button>
+          </label>
+        </div>
+      </section>
+
+      <section class="device" aria-label="Device preview">
+        <h2>Device</h2>
+        <div id="oled" class="oled" aria-label="OLED preview">
+          <span></span><span></span><span></span><span></span>
+        </div>
+        <div class="indicators">
+          <div class="ind"><span id="ledRed" class="led red"></span><span>Red LED</span></div>
+          <div class="ind"><span id="ledGreen" class="led green"></span><span>Green LED</span></div>
+          <div class="ind" id="buzzerInd">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4h3.5L12 18V6L7.5 10z"/><path class="wave w1" d="M15 9.5a4 4 0 0 1 0 5"/><path class="wave w2" d="M17.5 7a7.5 7.5 0 0 1 0 10"/></svg>
+            <span>Buzzer</span>
+          </div>
+        </div>
+        <p id="lastEvent" class="last-event">No alerts yet.</p>
+      </section>
+    </aside>
+  </main>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <script>window.WAYPOINT = {{ client_cfg|tojson }};</script>
+  <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+  <script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

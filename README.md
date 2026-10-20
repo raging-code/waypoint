@@ -59,7 +59,7 @@ TX and RX are **crossed**: the module sends, the Pi receives. Most NEO-6M boards
 | Active buzzer (or buzzer module) | signal to GPIO18 (pin 12), other side to GND |
 | Green LED | GPIO23 (pin 16) through a 220 ohm resistor to GND |
 | Red LED | GPIO24 (pin 18) through a 220 ohm resistor to GND |
-| OLED 128x64 (I2C, SSD1306) | VCC to 3.3V (pin 1), GND to GND, SDA to GPIO2 (pin 3), SCL to GPIO3 (pin 5) |
+| OLED 128x64 (I2C, SSD1306) - NFP1315-157B Y, 0.96" | VCC to 3.3V (pin 1), GND to GND, SDA to GPIO2 (pin 3), SCL to GPIO3 (pin 5) |
 | Speaker | 3.5 mm jack, HDMI, USB or Bluetooth audio |
 
 A bare buzzer that draws more than about 15 mA needs a transistor; use a buzzer *module* or an NPN transistor to be safe. Change pins in `.env` if you wire differently.
@@ -132,7 +132,7 @@ Copy `.env.example` to `.env`. The most useful:
 | `GPS_MODE` | `auto` (real module if the port opens, else simulator), `serial`, `simulator` |
 | `GPS_PORT` | blank = auto-detect. `/dev/serial0` on the Pi GPIO wiring, `/dev/ttyACM0` for USB, `COM5` on Windows |
 | `HARDWARE` | `auto` or `off` (force simulated buzzer/LEDs/OLED) |
-| `OLED_DRIVER` | `ssd1306` (most 0.96") or `sh1106` (most 1.3") |
+| `OLED_DRIVER` | `ssd1306` - NFP1315-157B Y and most other 0.96" panels - or `sh1106` (most 1.3") |
 | `OLED_I2C_ADDRESS` | `0x3C` (try `0x3D` if `i2cdetect -y 1` shows that) |
 | `HOST` | `0.0.0.0` = reachable on your network, `127.0.0.1` = this device only |
 

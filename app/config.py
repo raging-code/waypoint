@@ -59,7 +59,7 @@ class Config:
     led_green_pin: int
     led_red_pin: int
     oled_mode: str  # auto | off
-    oled_driver: str  # ssd1306 | sh1106
+    oled_driver: str  # ssd1306 (NFP1315-157B Y, 0.96", and most other 0.96" panels) | sh1106 (most 1.3")
     oled_i2c_port: int
     oled_i2c_address: int
 

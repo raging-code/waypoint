@@ -14,6 +14,7 @@ from typing import Deque, Dict, List, Optional
 
 from . import nmea
 from .config import Config
+from .position_filter import UBX_TUNE, PositionFilter, ubx_tune_packet
 
 log = logging.getLogger("waypoint.gps")
 
@@ -56,6 +57,11 @@ class SerialSource:
 
         self.name = port
         self._serial = serial.Serial(port, baudrate=baud, timeout=1.0)
+        if UBX_TUNE:  # pedestrian model + ignore low satellites (RAM only, resent each start)
+            try:
+                self._serial.write(ubx_tune_packet())
+            except Exception:
+                pass
 
     def readline(self) -> str:
         raw = self._serial.readline()
@@ -183,6 +189,8 @@ class GPSState:
             self.hdop: Optional[float] = None
             self.utc_time: Optional[str] = None
             self.utc_date: Optional[str] = None
+            self._filter = PositionFilter()  # steady-position filter (see position_filter.py)
+            self._seen_gga = False
 
     def set_link(self, source: str, port: str, note: str = "") -> None:
         with self._lock:
@@ -207,16 +215,26 @@ class GPSState:
                     self.satellites = int(msg["satellites"])  # type: ignore[arg-type]
                 if msg["hdop"] is not None:
                     self.hdop = float(msg["hdop"])  # type: ignore[arg-type]
+                self._seen_gga = True
                 if self.fix and msg["lat"] is not None and msg["lon"] is not None:
-                    self.lat, self.lon = msg["lat"], msg["lon"]  # type: ignore[assignment]
-                    if msg["altitude"] is not None:
-                        self.altitude = float(msg["altitude"])  # type: ignore[arg-type]
+                    out = self._filter.update(
+                        msg["lat"], msg["lon"], sats=msg["satellites"], hdop=msg["hdop"],  # type: ignore[arg-type]
+                        fix_type=self.fix_type, speed_kmh=self.speed_kmh)
+                    if out is not None:
+                        self.lat, self.lon = out
+                        if msg["altitude"] is not None:
+                            self.altitude = self._filter.smooth_alt(float(msg["altitude"]))  # type: ignore[arg-type]
                 if msg["time"]:
                     self.utc_time = str(msg["time"])
             elif kind == "RMC":
                 self.fix = bool(msg["valid"])
                 if self.fix and msg["lat"] is not None and msg["lon"] is not None:
-                    self.lat, self.lon = msg["lat"], msg["lon"]  # type: ignore[assignment]
+                    if not self._seen_gga:  # no GGA sentences at all: fall back to the RMC position
+                        out = self._filter.update(
+                            msg["lat"], msg["lon"], sats=None, hdop=self.hdop,  # type: ignore[arg-type]
+                            fix_type=self.fix_type, speed_kmh=msg["speed_kmh"])  # type: ignore[arg-type]
+                        if out is not None:
+                            self.lat, self.lon = out
                     if msg["speed_kmh"] is not None:
                         self.speed_kmh = float(msg["speed_kmh"])  # type: ignore[arg-type]
                     if msg["course"] is not None:
@@ -251,7 +269,9 @@ class GPSState:
                 "lat": self.lat,
                 "lon": self.lon,
                 "altitude": self.altitude,
-                "speed_kmh": self.speed_kmh if fix else None,
+                "speed_kmh": ((0.0 if self._filter.stationary and self.speed_kmh is not None else self.speed_kmh)
+                              if fix else None),
+                "stationary": bool(fix and self._filter.stationary),
                 "course": self.course,
                 "satellites": self.satellites if connected else 0,
                 "in_view": self.in_view if connected else 0,

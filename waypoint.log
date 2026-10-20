@@ -1,0 +1,20 @@
+nohup: ignoring input
+17:58:56  INFO    waypoint.hardware: Buzzer ready on GPIO18
+17:58:56  INFO    waypoint.hardware: LEDs ready (red GPIO24, green GPIO23)
+17:58:56  INFO    waypoint.hardware: OLED simulated (I2C device not found on address: 0x3C)
+17:58:56  INFO    waypoint.voice: Voice backend: espeak-ng
+
+  Waypoint is running
+  On this device   http://localhost:5000
+  On your network  http://192.168.18.87:5000
+  GPS mode: serial   (Ctrl+C to stop)
+
+ * Serving Flask app 'app'
+ * Debug mode: off
+17:58:56  INFO    waypoint.gps: GPS serial port opened: /dev/ttyAMA0 @ 9600 baud
+17:59:13  WARNING waypoint.gps: GPS read error: device reports readiness to read but returned no data (device disconnected or multiple access on port?)
+17:59:15  INFO    waypoint.gps: GPS serial port opened: /dev/ttyAMA0 @ 9600 baud
+17:59:15  WARNING waypoint.gps: GPS read error: device reports readiness to read but returned no data (device disconnected or multiple access on port?)
+17:59:17  INFO    waypoint.gps: GPS serial port opened: /dev/ttyAMA0 @ 9600 baud
+17:59:17  WARNING waypoint.gps: GPS read error: device reports readiness to read but returned no data (device disconnected or multiple access on port?)
+17:59:19  INFO    waypoint.gps: GPS serial port opened: /dev/ttyAMA0 @ 9600 baud

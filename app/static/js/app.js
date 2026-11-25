@@ -504,11 +504,17 @@
     });
   }
 
-  function speakInBrowser(text) {
-    if (!("speechSynthesis" in window)) { toast("This browser cannot speak. Use the device speaker.", "warn"); return; }
+function speakInBrowser(text) {
+    if (!("speechSynthesis" in window)) {
+        toast("This browser cannot speak. Use the device speaker.", "warn");
+        return;
+    }
+
     window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
-  }
+    window.speechSynthesis.speak(
+        new SpeechSynthesisUtterance(text)
+    );
+}
 
   async function speak(quiet) {
     if (!store.last) return;

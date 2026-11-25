@@ -1,3 +1,8 @@
+# Run
+
+chmod +x start.sh
+./start.sh
+
 # Waypoint: live GPS tracker for Raspberry Pi
 
 A Raspberry Pi reads a NEO-6M GPS module, serves a clean web dashboard (live map, readings, chart, controls) and drives a buzzer, two LEDs, an OLED and a voice that says where you are.
@@ -169,5 +174,6 @@ docs/                   block diagram and workbook notes
 ```
 
 Map tiles (OpenStreetMap or Google) still need an internet connection. Everything else works offline.
-#   w a y p o i n t  
+#   w a y p o i n t 
+ 
  
